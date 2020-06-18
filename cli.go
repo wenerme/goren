@@ -3,17 +3,53 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/urfave/cli/v2"
 	"io"
 	"os"
 	"strings"
+
+	"github.com/urfave/cli/v2"
 )
+
+type CloserFunc func() error
+
+func (f CloserFunc) Close() error {
+	return f()
+}
 
 func NewGorenApp() *cli.App {
 	app := cli.NewApp()
 	app.Name = "goren"
 	app.Version = getVersion()
 	app.UsageText = "goren [options]"
+	app.Commands = []*cli.Command{
+		{
+			Name:        "render",
+			Description: "Render template",
+			Flags: []cli.Flag{
+				&cli.PathFlag{Name: "in", Aliases: []string{"i"}, Usage: "Input file or directory", DefaultText: "-"},
+				&cli.PathFlag{Name: "out", Aliases: []string{"o"}, Usage: "Output file or directory", DefaultText: "-"},
+			},
+			Action: func(ctx *cli.Context) error {
+				proc := &Process{
+					src:  ctx.Path("in"),
+					dest: ctx.Path("out"),
+				}
+				fmt.Printf("Render %v -> %v\n", proc.src, proc.dest)
+				render := NewRender()
+
+				err := pipe(render, proc)
+				return err
+			},
+		},
+		{
+			Name:        "watch",
+			Description: "Rerender when changed",
+			Action: func(context *cli.Context) error {
+				fmt.Println("Watch")
+				return nil
+			},
+		},
+	}
 
 	// step: the standard usage message isn't that helpful
 	app.OnUsageError = func(context *cli.Context, err error, isSubcommand bool) error {
@@ -21,27 +57,41 @@ func NewGorenApp() *cli.App {
 		return err
 	}
 
-	app.Action = func(cx *cli.Context) error {
-		render := NewRender()
-		f := bufio.NewWriter(os.Stdout)
-		defer f.Flush()
-
-		proc := &Process{in: os.Stdin, out: f}
-		err := pipe(render, proc)
-		return err
-	}
-
 	return app
 }
 
 func pipe(render *Render, proc *Process) error {
+	{
+		if proc.src == "-" {
+			proc.in = os.Stdin
+		} else {
+			in, err := os.Open(proc.src)
+			if err != nil {
+				return err
+			}
+			proc.in = in
+		}
 
-	buf := new(strings.Builder)
-	_, err := io.Copy(buf, proc.in)
-	if err != nil {
-		return err
+		if proc.dest == "-" {
+			f := bufio.NewWriter(os.Stdout)
+			proc.out = f
+			proc.closers = append(proc.closers, CloserFunc(f.Flush))
+		} else {
+			f, err := os.Open(proc.dest)
+			if err != nil {
+				return err
+			}
+			proc.out = f
+		}
 	}
-	proc.inputString = buf.String()
+	{
+		buf := new(strings.Builder)
+		_, err := io.Copy(buf, proc.in)
+		if err != nil {
+			return err
+		}
+		proc.inputString = buf.String()
+	}
 
 	{
 		tpl, err := render.tpl.Parse(proc.inputString)

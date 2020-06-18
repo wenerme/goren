@@ -18,13 +18,13 @@ func NewRender() *Render {
 	}
 }
 
-func (self *Render) RenderString(content string) (string, error) {
-	t, err := self.tpl.Parse(content)
+func (r *Render) RenderString(content string) (string, error) {
+	t, err := r.tpl.Parse(content)
 	if err != nil {
 		return "", err
 	}
 
 	buf := bytes.NewBufferString("")
-	err = t.Execute(buf, self.data)
+	err = t.Execute(buf, r.data)
 	return buf.String(), err
 }

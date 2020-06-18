@@ -7,12 +7,15 @@ import (
 
 /// Process
 type Process struct {
-	in  io.Reader
-	out io.Writer
+	src  string
+	in   io.Reader
+	dest string
+	out  io.Writer
 
 	inputString  string
 	outputString string
 
-	tpl  *template.Template
-	data interface{}
+	tpl     *template.Template
+	data    interface{}
+	closers []io.Closer
 }

@@ -25,3 +25,6 @@ func getVersion() string {
 
 	return version
 }
+
+type GlobalConfig struct {
+}
